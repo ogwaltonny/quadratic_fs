@@ -127,10 +127,24 @@ class Loan {
   }) : payments = payments ?? [];
 }
 
+class PasswordValidator {
+  static String? validate(String? value) {
+    if (value == null || value.trim().isEmpty) return 'Password is required';
+    if (value.length < 8) return 'Password must be at least 8 characters long';
+    if (!RegExp(r'[0-9]').hasMatch(value)) return 'Must contain at least one digit (0-9)';
+    if (!RegExp(r'[a-zA-Z]').hasMatch(value)) return 'Must contain letters (a-z, A-Z)';
+    if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-=+/\\]').hasMatch(value)) {
+      return 'Must contain at least one special symbol (!@#\$%^&*...)';
+    }
+    return null;
+  }
+  static bool isStrong(String value) => validate(value) == null;
+}
+
 class Staff {
   final int id;
   String fullName, email, phone, username, role, status;
-  String nin, district, dob;
+  String nin, district, dob, password;
   int? branchId;
   Uint8List? photo;
   Staff({
@@ -143,6 +157,7 @@ class Staff {
     required this.nin,
     required this.district,
     required this.dob,
+    required this.password,
     this.status = 'Active',
     this.branchId,
     this.photo,
@@ -296,12 +311,75 @@ class AppState extends ChangeNotifier {
   num bankedFor(String dateIso) => bankedByDate[_bankedKey(dateIso)] ?? 0;
   bool hasBanked(String dateIso) => bankedByDate.containsKey(_bankedKey(dateIso));
 
+  Staff? currentUser;
+  bool get isAuthenticated => currentUser != null;
+
   void setRole(String role, String name, String avatar) {
     currentRole = role;
     currentUserName = name;
     currentUserAvatar = avatar;
     _syncUserPhoto();
     notifyListeners();
+  }
+
+  String? login(String usernameOrEmail, String password) {
+    final cleanInput = usernameOrEmail.trim().toLowerCase();
+    final cleanPass = password.trim();
+
+    final matches = staffList.where((s) {
+      final u = s.username.toLowerCase();
+      final e = s.email.toLowerCase();
+      final isOgwalManager = (s.role == Role.manager && cleanInput == 'ogwal');
+      return u == cleanInput || e == cleanInput || isOgwalManager;
+    }).toList();
+
+    if (matches.isEmpty) {
+      return 'Account not found. Please contact the Manager.';
+    }
+
+    final staff = matches.first;
+    if (staff.status != 'Active') {
+      return 'Your account is deactivated. Please contact the Manager.';
+    }
+
+    if (staff.password != cleanPass) {
+      return 'Incorrect password. Please try again.';
+    }
+
+    currentUser = staff;
+    currentRole = staff.role;
+    currentUserName = staff.fullName;
+    currentUserAvatar = staff.fullName.isNotEmpty ? staff.fullName[0].toUpperCase() : 'U';
+    currentUserPhoto = staff.photo;
+    activeBranchId = staff.branchId;
+    notifyListeners();
+    return null;
+  }
+
+  void logout() {
+    currentUser = null;
+    activeBranchId = null;
+    notifyListeners();
+  }
+
+  String? changePassword(String currentPass, String newPass, String confirmPass) {
+    if (currentUser == null) return 'No user currently logged in.';
+    if (currentUser!.password != currentPass.trim()) {
+      return 'Current password does not match.';
+    }
+    if (newPass.trim() != confirmPass.trim()) {
+      return 'New password and confirmation do not match.';
+    }
+    final validationError = PasswordValidator.validate(newPass.trim());
+    if (validationError != null) return validationError;
+
+    currentUser!.password = newPass.trim();
+    final idx = staffList.indexWhere((s) => s.id == currentUser!.id && s.branchId == currentUser!.branchId);
+    if (idx != -1) {
+      staffList[idx].password = newPass.trim();
+    }
+    notifyListeners();
+    return null;
   }
 
   void _syncUserPhoto() {
@@ -454,16 +532,20 @@ class AppState extends ChangeNotifier {
     staffList = [
       Staff(id: 1, fullName: 'Sarah Adong', email: 'sarah@quadratic.com',
           phone: '0777123456', username: 'manager', role: 'manager', nin: 'CM123456',
-          district: 'Arua', dob: '1985-05-15', branchId: 1),
+          district: 'Arua', dob: '1985-05-15', branchId: 1,
+          password: r'ogwal88@$ton'),
       Staff(id: 2, fullName: 'Grace Auma', email: 'grace@quadratic.com',
           phone: '0777456789', username: 'grace', role: 'cashier', nin: 'CM345678',
-          district: 'Arua', dob: '1995-02-10', branchId: 1),
+          district: 'Arua', dob: '1995-02-10', branchId: 1,
+          password: 'Grace123@#'),
       Staff(id: 1, fullName: 'John Ochen', email: 'john@quadratic.com',
           phone: '0777654321', username: 'john', role: 'supervisor', nin: 'CM789012',
-          district: 'Kampala', dob: '1990-08-20', branchId: 2),
+          district: 'Kampala', dob: '1990-08-20', branchId: 2,
+          password: 'John123@#'),
       Staff(id: 2, fullName: 'Peter Otim', email: 'peter@quadratic.com',
           phone: '0777567890', username: 'peter', role: 'field_officer', nin: 'CM901234',
-          district: 'Kampala', dob: '1992-11-30', branchId: 2),
+          district: 'Kampala', dob: '1992-11-30', branchId: 2,
+          password: 'Peter123@#'),
     ];
     _branchStaffCounter[1] = 3;
     _branchStaffCounter[2] = 3;
@@ -526,10 +608,10 @@ class QuadraticApp extends StatelessWidget {
     return AnimatedBuilder(
       animation: appState,
       builder: (_, __) => MaterialApp(
-        title: 'Quadratic Financial Services',
+        title: 'Quadratic FS',
         debugShowCheckedModeBanner: false,
         theme: _theme(),
-        home: const AppShell(),
+        home: appState.isAuthenticated ? const AppShell() : const LoginScreen(),
       ),
     );
   }
@@ -886,20 +968,48 @@ class _AppShellState extends State<AppShell> {
             ),
           const SizedBox(width: 12),
           PopupMenuButton<String>(
-            tooltip: 'Switch role',
+            tooltip: 'Account Menu',
             child: const _UserAvatar(),
             onSelected: (v) {
-              final parts = v.split('|');
-              appState.setRole(parts[0], parts[1], parts[2]);
-              if (!Role.pages(parts[0]).contains(page)) {
-                setState(() => page = 'dashboard');
+              if (v == 'change_password') {
+                showDialog(
+                  context: context,
+                  builder: (_) => const ChangePasswordDialog(),
+                );
+              } else if (v == 'logout') {
+                appState.logout();
               }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'manager|Sarah Adong|S', child: Text('👤 Manager (Sarah)')),
-              PopupMenuItem(value: 'supervisor|John Ochen|J', child: Text('👤 Supervisor (John)')),
-              PopupMenuItem(value: 'cashier|Grace Auma|G', child: Text('👤 Cashier (Grace)')),
-              PopupMenuItem(value: 'field_officer|Peter Otim|P', child: Text('👤 Field Officer (Peter)')),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                enabled: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(appState.currentUserName,
+                        style: const TextStyle(fontWeight: FontWeight.w700, color: C.textPrimary)),
+                    Text(Role.label(appState.currentRole),
+                        style: const TextStyle(fontSize: 11, color: C.textMuted)),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'change_password',
+                child: Row(children: [
+                  Icon(Icons.lock_reset, size: 18, color: C.primary),
+                  SizedBox(width: 10),
+                  Text('Change Password'),
+                ]),
+              ),
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(children: [
+                  Icon(Icons.logout, size: 18, color: C.danger),
+                  SizedBox(width: 10),
+                  Text('Sign Out', style: TextStyle(color: C.danger)),
+                ]),
+              ),
             ],
           ),
         ],
@@ -3413,7 +3523,52 @@ class _BranchShellState extends State<BranchShell> {
                   style: const TextStyle(fontSize: 13, color: C.textMuted)),
             ),
           const SizedBox(width: 12),
-          const _UserAvatar(),
+          PopupMenuButton<String>(
+            tooltip: 'Account Menu',
+            child: const _UserAvatar(),
+            onSelected: (v) {
+              if (v == 'change_password') {
+                showDialog(
+                  context: context,
+                  builder: (_) => const ChangePasswordDialog(),
+                );
+              } else if (v == 'logout') {
+                appState.logout();
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                enabled: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(appState.currentUserName,
+                        style: const TextStyle(fontWeight: FontWeight.w700, color: C.textPrimary)),
+                    Text(Role.label(appState.currentRole),
+                        style: const TextStyle(fontSize: 11, color: C.textMuted)),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'change_password',
+                child: Row(children: [
+                  Icon(Icons.lock_reset, size: 18, color: C.primary),
+                  SizedBox(width: 10),
+                  Text('Change Password'),
+                ]),
+              ),
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(children: [
+                  Icon(Icons.logout, size: 18, color: C.danger),
+                  SizedBox(width: 10),
+                  Text('Sign Out', style: TextStyle(color: C.danger)),
+                ]),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -3571,6 +3726,8 @@ class StaffScreen extends StatelessWidget {
     final email = TextEditingController();
     final phone = TextEditingController();
     final username = TextEditingController();
+    final password = TextEditingController();
+    bool obscurePass = true;
     String role = '';
     int? branchId = appState.activeBranchId;
     Uint8List? photoBytes;
@@ -3652,6 +3809,20 @@ class StaffScreen extends StatelessWidget {
             TextField(controller: username,
                 decoration: const InputDecoration(labelText: 'Username *')),
             const SizedBox(height: 8),
+            TextField(
+              controller: password,
+              obscureText: obscurePass,
+              decoration: InputDecoration(
+                labelText: 'Initial Password *',
+                helperText: 'Must contain: 8+ chars, digits, letters & symbols',
+                helperMaxLines: 2,
+                suffixIcon: IconButton(
+                  icon: Icon(obscurePass ? Icons.visibility_off : Icons.visibility, size: 18),
+                  onPressed: () => setS(() => obscurePass = !obscurePass),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               initialValue: role.isEmpty ? null : role,
               decoration: const InputDecoration(labelText: 'Role *'),
@@ -3687,7 +3858,18 @@ class StaffScreen extends StatelessWidget {
             onPressed: () {
               if (name.text.isEmpty || nin.text.isEmpty || district.text.isEmpty ||
                   dob.text.isEmpty || email.text.isEmpty || phone.text.isEmpty ||
-                  username.text.isEmpty || role.isEmpty || branchId == null) return;
+                  username.text.isEmpty || role.isEmpty || branchId == null ||
+                  password.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please fill all required fields')));
+                return;
+              }
+              final passErr = PasswordValidator.validate(password.text);
+              if (passErr != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('❌ $passErr')));
+                return;
+              }
               if (photoBytes == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Staff photo required')));
@@ -3699,6 +3881,7 @@ class StaffScreen extends StatelessWidget {
                 email: email.text,
                 phone: phone.text,
                 username: username.text,
+                password: password.text.trim(),
                 role: role,
                 nin: nin.text,
                 district: district.text,
@@ -3714,5 +3897,401 @@ class StaffScreen extends StatelessWidget {
         ],
       ),
     ));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  9. CHANGE PASSWORD DIALOG
+// ═══════════════════════════════════════════════════════════════════════════
+class ChangePasswordDialog extends StatefulWidget {
+  const ChangePasswordDialog({super.key});
+
+  @override
+  State<ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
+  final _oldPass = TextEditingController();
+  final _newPass = TextEditingController();
+  final _confirmPass = TextEditingController();
+  bool _obscureOld = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _oldPass.dispose();
+    _newPass.dispose();
+    _confirmPass.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final err = appState.changePassword(
+      _oldPass.text,
+      _newPass.text,
+      _confirmPass.text,
+    );
+    if (err != null) {
+      setState(() => _errorMessage = err);
+    } else {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ Password changed successfully!')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: const [
+          Icon(Icons.lock_reset, color: C.primary),
+          SizedBox(width: 8),
+          Text('Change Password', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Logged in as: ${appState.currentUserName} (${Role.label(appState.currentRole)})',
+              style: const TextStyle(fontSize: 12, color: C.textMuted),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _oldPass,
+              obscureText: _obscureOld,
+              decoration: InputDecoration(
+                labelText: 'Current Password *',
+                prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureOld ? Icons.visibility_off : Icons.visibility, size: 18),
+                  onPressed: () => setState(() => _obscureOld = !_obscureOld),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _newPass,
+              obscureText: _obscureNew,
+              decoration: InputDecoration(
+                labelText: 'New Password *',
+                prefixIcon: const Icon(Icons.key, size: 20),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureNew ? Icons.visibility_off : Icons.visibility, size: 18),
+                  onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _confirmPass,
+              obscureText: _obscureConfirm,
+              decoration: InputDecoration(
+                labelText: 'Confirm New Password *',
+                prefixIcon: const Icon(Icons.check_circle_outline, size: 20),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility, size: 18),
+                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: const Text(
+                'Password must be at least 8 characters and include digits (0-9), letters (a-z), and special symbols (!@#\$%^&*).',
+                style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
+              ),
+            ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                '❌ $_errorMessage',
+                style: const TextStyle(color: C.danger, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: _submit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: C.primary,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Save Password'),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  10. LOGIN SCREEN
+// ═══════════════════════════════════════════════════════════════════════════
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _usernameCtrl = TextEditingController(text: 'manager');
+  final _passwordCtrl = TextEditingController(text: r'ogwal88@$ton');
+  bool _obscurePassword = true;
+  String? _errorMessage;
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _usernameCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  void _doLogin() {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final err = appState.login(_usernameCtrl.text, _passwordCtrl.text);
+
+    setState(() {
+      _isLoading = false;
+      _errorMessage = err;
+    });
+  }
+
+  void _fillAccount(String username, String pass) {
+    setState(() {
+      _usernameCtrl.text = username;
+      _passwordCtrl.text = pass;
+      _errorMessage = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width < 600;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Card(
+              elevation: 4,
+              shadowColor: Colors.black.withOpacity(0.08),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              color: Colors.white,
+              child: Padding(
+                padding: EdgeInsets.all(isMobile ? 24 : 36),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Brand Icon
+                    Center(
+                      child: Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: C.primary,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: C.primary.withOpacity(0.3),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.payments, color: C.accent, size: 34),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'QUADRATIC FS',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: C.primary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Money Lending Management System',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13, color: C.textMuted),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Error Box
+                    if (_errorMessage != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline, color: C.danger, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: const TextStyle(color: C.danger, fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Username
+                    TextField(
+                      controller: _usernameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Username or Email',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                      textInputAction: TextInputAction.next,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Password
+                    TextField(
+                      controller: _passwordCtrl,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                            size: 20,
+                            color: C.textMuted,
+                          ),
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                        ),
+                      ),
+                      onSubmitted: (_) => _doLogin(),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Sign In Button
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _doLogin,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: C.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 1,
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Text(
+                              'Sign In',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                            ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Quick Staff Accounts Card
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Quick Logins (Tap to Select):',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: C.textMuted),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              _accountChip('Manager (Sarah)', 'manager', r'ogwal88@$ton', C.primary),
+                              _accountChip('Supervisor (John)', 'john', 'John123@#', C.info),
+                              _accountChip('Cashier (Grace)', 'grace', 'Grace123@#', C.success),
+                              _accountChip('Field Officer (Peter)', 'peter', 'Peter123@#', const Color(0xFFD97706)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+                    const Center(
+                      child: Text(
+                        '© 2026 Quadratic Financial Services · All Rights Reserved',
+                        style: TextStyle(fontSize: 11, color: C.textFaint),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _accountChip(String label, String username, String pass, Color color) {
+    return InkWell(
+      onTap: () => _fillAccount(username, pass),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
+        ),
+      ),
+    );
   }
 }
