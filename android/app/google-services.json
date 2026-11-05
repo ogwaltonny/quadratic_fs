@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1040924337210",
+    "project_id": "quadratic-fs",
+    "storage_bucket": "quadratic-fs.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1040924337210:android:293ceb797601722dd94103",
+        "android_client_info": {
+          "package_name": "com.example.ogwal_lending"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAUa6lI9z19-Ip62byG7vh31fZUOpmyKbU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

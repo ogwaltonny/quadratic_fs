@@ -1,9 +1,13 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  QUADRATIC FINANCIAL SERVICES — Money Lending Management System
@@ -74,12 +78,78 @@ class Customer {
   String get fullName => '$firstName $lastName';
   String get guarantorName =>
       '$guarantorFirstName $guarantorLastName'.trim();
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'firstName': firstName,
+    'lastName': lastName,
+    'phone': phone,
+    'district': district,
+    'monthlyIncome': monthlyIncome,
+    'occupation': occupation,
+    'placeOfWork': placeOfWork,
+    'idType': idType,
+    'idNumber': idNumber,
+    'email': email,
+    'photo': photo != null ? base64Encode(photo!) : null,
+    'guarantorFirstName': guarantorFirstName,
+    'guarantorLastName': guarantorLastName,
+    'guarantorPhone': guarantorPhone,
+    'guarantorDistrict': guarantorDistrict,
+    'guarantorOccupation': guarantorOccupation,
+    'guarantorPlaceOfWork': guarantorPlaceOfWork,
+    'guarantorIdType': guarantorIdType,
+    'guarantorIdNumber': guarantorIdNumber,
+    'guarantorEmail': guarantorEmail,
+    'guarantorLocation': guarantorLocation,
+    'guarantorIncome': guarantorIncome,
+    'guarantorPhoto': guarantorPhoto != null ? base64Encode(guarantorPhoto!) : null,
+    'branchId': branchId,
+  };
+
+  factory Customer.fromMap(Map<String, dynamic> m) => Customer(
+    id: (m['id'] as num?)?.toInt() ?? 0,
+    firstName: m['firstName'] ?? '',
+    lastName: m['lastName'] ?? '',
+    phone: m['phone'] ?? '',
+    district: m['district'] ?? '',
+    monthlyIncome: (m['monthlyIncome'] as num?) ?? 0,
+    occupation: m['occupation'] ?? '',
+    placeOfWork: m['placeOfWork'] ?? '',
+    idType: m['idType'] ?? '',
+    idNumber: m['idNumber'] ?? '',
+    email: m['email'] ?? '',
+    photo: m['photo'] != null ? base64Decode(m['photo'] as String) : null,
+    guarantorFirstName: m['guarantorFirstName'] ?? '',
+    guarantorLastName: m['guarantorLastName'] ?? '',
+    guarantorPhone: m['guarantorPhone'] ?? '',
+    guarantorDistrict: m['guarantorDistrict'] ?? '',
+    guarantorOccupation: m['guarantorOccupation'] ?? '',
+    guarantorPlaceOfWork: m['guarantorPlaceOfWork'] ?? '',
+    guarantorIdType: m['guarantorIdType'] ?? '',
+    guarantorIdNumber: m['guarantorIdNumber'] ?? '',
+    guarantorEmail: m['guarantorEmail'] ?? '',
+    guarantorLocation: m['guarantorLocation'] ?? '',
+    guarantorIncome: (m['guarantorIncome'] as num?) ?? 0,
+    guarantorPhoto: m['guarantorPhoto'] != null ? base64Decode(m['guarantorPhoto'] as String) : null,
+    branchId: (m['branchId'] as num?)?.toInt(),
+  );
 }
 
 class Payment {
   final num amount;
   final DateTime timestamp;
   Payment(this.amount, this.timestamp);
+
+  Map<String, dynamic> toMap() => {
+    'amount': amount,
+    'timestamp': timestamp.toIso8601String(),
+  };
+
+  factory Payment.fromMap(Map<String, dynamic> m) => Payment(
+    (m['amount'] as num?) ?? 0,
+    DateTime.tryParse(m['timestamp'] ?? '') ?? DateTime.now(),
+  );
 }
 
 class Loan {
@@ -125,6 +195,62 @@ class Loan {
     this.securityNIN = '',
     this.branchId,
   }) : payments = payments ?? [];
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'customerId': customerId,
+    'customerName': customerName,
+    'amount': amount,
+    'rate': rate,
+    'tenure': tenure,
+    'emi': emi,
+    'processingFee': processingFee,
+    'status': status,
+    'frequency': frequency,
+    'loanDate': loanDate,
+    'approverName': approverName,
+    'approverTitle': approverTitle,
+    'payments': payments.map((p) => p.toMap()).toList(),
+    'businessName': businessName,
+    'businessDistrict': businessDistrict,
+    'businessLocation': businessLocation,
+    'businessNearby': businessNearby,
+    'loanAmountFigures': loanAmountFigures,
+    'loanAmountWords': loanAmountWords,
+    'securityProperty': securityProperty,
+    'securityVehicle': securityVehicle,
+    'securityVehicleReg': securityVehicleReg,
+    'securityNIN': securityNIN,
+    'branchId': branchId,
+  };
+
+  factory Loan.fromMap(Map<String, dynamic> m) => Loan(
+    id: (m['id'] as num?)?.toInt() ?? 0,
+    customerId: (m['customerId'] as num?)?.toInt() ?? 0,
+    customerName: m['customerName'] ?? '',
+    amount: (m['amount'] as num?) ?? 0,
+    rate: (m['rate'] as num?) ?? 0,
+    tenure: (m['tenure'] as num?)?.toInt() ?? 0,
+    emi: (m['emi'] as num?) ?? 0,
+    processingFee: (m['processingFee'] as num?) ?? 0,
+    status: m['status'] ?? 'pending',
+    frequency: m['frequency'] ?? 'Weekly',
+    loanDate: m['loanDate'] ?? '',
+    approverName: m['approverName'] ?? '',
+    approverTitle: m['approverTitle'] ?? '',
+    payments: (m['payments'] as List?)?.map((p) => Payment.fromMap(Map<String, dynamic>.from(p))).toList() ?? [],
+    businessName: m['businessName'] ?? '',
+    businessDistrict: m['businessDistrict'] ?? '',
+    businessLocation: m['businessLocation'] ?? '',
+    businessNearby: m['businessNearby'] ?? '',
+    loanAmountFigures: (m['loanAmountFigures'] as num?) ?? 0,
+    loanAmountWords: m['loanAmountWords'] ?? '',
+    securityProperty: m['securityProperty'] ?? '',
+    securityVehicle: m['securityVehicle'] ?? '',
+    securityVehicleReg: m['securityVehicleReg'] ?? '',
+    securityNIN: m['securityNIN'] ?? '',
+    branchId: (m['branchId'] as num?)?.toInt(),
+  );
 }
 
 class PasswordValidator {
@@ -162,6 +288,38 @@ class Staff {
     this.branchId,
     this.photo,
   });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'fullName': fullName,
+    'email': email,
+    'phone': phone,
+    'username': username,
+    'role': role,
+    'nin': nin,
+    'district': district,
+    'dob': dob,
+    'password': password,
+    'status': status,
+    'branchId': branchId,
+    'photo': photo != null ? base64Encode(photo!) : null,
+  };
+
+  factory Staff.fromMap(Map<String, dynamic> m) => Staff(
+    id: (m['id'] as num?)?.toInt() ?? 0,
+    fullName: m['fullName'] ?? '',
+    email: m['email'] ?? '',
+    phone: m['phone'] ?? '',
+    username: m['username'] ?? '',
+    role: m['role'] ?? 'field_officer',
+    nin: m['nin'] ?? '',
+    district: m['district'] ?? '',
+    dob: m['dob'] ?? '',
+    password: m['password'] ?? '',
+    status: m['status'] ?? 'Active',
+    branchId: (m['branchId'] as num?)?.toInt(),
+    photo: m['photo'] != null ? base64Decode(m['photo'] as String) : null,
+  );
 }
 
 class Branch {
@@ -170,6 +328,20 @@ class Branch {
   String location;
   String manager;
   Branch({required this.id, required this.name, required this.location, this.manager = ''});
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'name': name,
+    'location': location,
+    'manager': manager,
+  };
+
+  factory Branch.fromMap(Map<String, dynamic> m) => Branch(
+    id: (m['id'] as num?)?.toInt() ?? 0,
+    name: m['name'] ?? '',
+    location: m['location'] ?? '',
+    manager: m['manager'] ?? '',
+  );
 }
 
 class DailyExpense {
@@ -180,6 +352,22 @@ class DailyExpense {
   int? branchId;
   DailyExpense({required this.id, required this.date,
     required this.description, required this.amount, this.branchId});
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'date': date,
+    'description': description,
+    'amount': amount,
+    'branchId': branchId,
+  };
+
+  factory DailyExpense.fromMap(Map<String, dynamic> m) => DailyExpense(
+    id: (m['id'] as num?)?.toInt() ?? 0,
+    date: m['date'] ?? '',
+    description: m['description'] ?? '',
+    amount: (m['amount'] as num?) ?? 0,
+    branchId: (m['branchId'] as num?)?.toInt(),
+  );
 }
 
 // ─── Roles ────────────────────────────────────────────────────────────────
@@ -249,6 +437,111 @@ class AppState extends ChangeNotifier {
   int _hqStaffCounter = 1;
   int _hqExpenseCounter = 1;
   int nextBranchId = 1;
+
+  bool isFirebaseConnected = false;
+  FirebaseFirestore? _firestore;
+
+  Future<void> initFirebase() async {
+    try {
+      _firestore = FirebaseFirestore.instance;
+      _firestore!.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      );
+      isFirebaseConnected = true;
+      debugPrint('Cloud Firestore initialized with offline persistence!');
+      await syncFromFirestore();
+    } catch (e) {
+      debugPrint('Firestore initialization notice: $e');
+    }
+  }
+
+  Future<void> saveCustomerToCloud(Customer c) async {
+    try {
+      await _firestore?.collection('customers').doc('cust_${c.id}').set(c.toMap());
+    } catch (e) {
+      debugPrint('Cloud save customer error: $e');
+    }
+  }
+
+  Future<void> saveLoanToCloud(Loan l) async {
+    try {
+      await _firestore?.collection('loans').doc('loan_${l.id}').set(l.toMap());
+    } catch (e) {
+      debugPrint('Cloud save loan error: $e');
+    }
+  }
+
+  Future<void> saveBranchToCloud(Branch b) async {
+    try {
+      await _firestore?.collection('branches').doc('branch_${b.id}').set(b.toMap());
+    } catch (e) {
+      debugPrint('Cloud save branch error: $e');
+    }
+  }
+
+  Future<void> saveStaffToCloud(Staff s) async {
+    try {
+      await _firestore?.collection('staff').doc('staff_${s.username}').set(s.toMap());
+    } catch (e) {
+      debugPrint('Cloud save staff error: $e');
+    }
+  }
+
+  Future<void> saveExpenseToCloud(DailyExpense exp) async {
+    try {
+      await _firestore?.collection('expenses').doc('exp_${exp.id}').set(exp.toMap());
+    } catch (e) {
+      debugPrint('Cloud save expense error: $e');
+    }
+  }
+
+  Future<void> syncFromFirestore() async {
+    if (_firestore == null) return;
+    try {
+      // 1. Branches
+      final branchSnap = await _firestore!.collection('branches').get();
+      if (branchSnap.docs.isNotEmpty) {
+        branches = branchSnap.docs.map((d) => Branch.fromMap(d.data())).toList();
+      } else {
+        for (final b in branches) { await saveBranchToCloud(b); }
+      }
+
+      // 2. Customers
+      final custSnap = await _firestore!.collection('customers').get();
+      if (custSnap.docs.isNotEmpty) {
+        customers = custSnap.docs.map((d) => Customer.fromMap(d.data())).toList();
+      } else {
+        for (final c in customers) { await saveCustomerToCloud(c); }
+      }
+
+      // 3. Loans
+      final loanSnap = await _firestore!.collection('loans').get();
+      if (loanSnap.docs.isNotEmpty) {
+        loans = loanSnap.docs.map((d) => Loan.fromMap(d.data())).toList();
+      } else {
+        for (final l in loans) { await saveLoanToCloud(l); }
+      }
+
+      // 4. Staff
+      final staffSnap = await _firestore!.collection('staff').get();
+      if (staffSnap.docs.isNotEmpty) {
+        staffList = staffSnap.docs.map((d) => Staff.fromMap(d.data())).toList();
+      } else {
+        for (final s in staffList) { await saveStaffToCloud(s); }
+      }
+
+      // 5. Expenses
+      final expSnap = await _firestore!.collection('expenses').get();
+      if (expSnap.docs.isNotEmpty) {
+        expenses = expSnap.docs.map((d) => DailyExpense.fromMap(d.data())).toList();
+      }
+
+      refresh();
+    } catch (e) {
+      debugPrint('Error syncing from Firestore: $e');
+    }
+  }
 
   AppState() { _loadSampleData(); _syncUserPhoto(); }
 
@@ -599,7 +892,18 @@ String isoDate(DateTime d) =>
 // ═══════════════════════════════════════════════════════════════════════════
 //  ROOT APP
 // ═══════════════════════════════════════════════════════════════════════════
-void main() => runApp(const QuadraticApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    await appState.initFirebase();
+  } catch (e) {
+    debugPrint('Firebase init fallback notice: $e');
+  }
+  runApp(const QuadraticApp());
+}
 
 class QuadraticApp extends StatelessWidget {
   const QuadraticApp({super.key});
