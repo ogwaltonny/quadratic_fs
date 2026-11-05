@@ -451,8 +451,52 @@ class AppState extends ChangeNotifier {
       isFirebaseConnected = true;
       debugPrint('Cloud Firestore initialized with offline persistence!');
       await syncFromFirestore();
+      _setupRealtimeListeners();
     } catch (e) {
       debugPrint('Firestore initialization notice: $e');
+    }
+  }
+
+  void _setupRealtimeListeners() {
+    if (_firestore == null) return;
+    try {
+      _firestore!.collection('branches').snapshots().listen((snap) {
+        if (snap.docs.isNotEmpty) {
+          branches = snap.docs.map((d) => Branch.fromMap(d.data())).toList();
+          refresh();
+        }
+      }, onError: (e) => debugPrint('Realtime branches stream error: $e'));
+
+      _firestore!.collection('customers').snapshots().listen((snap) {
+        if (snap.docs.isNotEmpty) {
+          customers = snap.docs.map((d) => Customer.fromMap(d.data())).toList();
+          refresh();
+        }
+      }, onError: (e) => debugPrint('Realtime customers stream error: $e'));
+
+      _firestore!.collection('loans').snapshots().listen((snap) {
+        if (snap.docs.isNotEmpty) {
+          loans = snap.docs.map((d) => Loan.fromMap(d.data())).toList();
+          refresh();
+        }
+      }, onError: (e) => debugPrint('Realtime loans stream error: $e'));
+
+      _firestore!.collection('staff').snapshots().listen((snap) {
+        if (snap.docs.isNotEmpty) {
+          staffList = snap.docs.map((d) => Staff.fromMap(d.data())).toList();
+          _syncUserPhoto();
+          refresh();
+        }
+      }, onError: (e) => debugPrint('Realtime staff stream error: $e'));
+
+      _firestore!.collection('expenses').snapshots().listen((snap) {
+        if (snap.docs.isNotEmpty) {
+          expenses = snap.docs.map((d) => DailyExpense.fromMap(d.data())).toList();
+          refresh();
+        }
+      }, onError: (e) => debugPrint('Realtime expenses stream error: $e'));
+    } catch (e) {
+      debugPrint('Error setting up realtime listeners: $e');
     }
   }
 
@@ -464,11 +508,27 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> deleteCustomerFromCloud(int id) async {
+    try {
+      await _firestore?.collection('customers').doc('cust_$id').delete();
+    } catch (e) {
+      debugPrint('Cloud delete customer error: $e');
+    }
+  }
+
   Future<void> saveLoanToCloud(Loan l) async {
     try {
       await _firestore?.collection('loans').doc('loan_${l.id}').set(l.toMap());
     } catch (e) {
       debugPrint('Cloud save loan error: $e');
+    }
+  }
+
+  Future<void> deleteLoanFromCloud(int id) async {
+    try {
+      await _firestore?.collection('loans').doc('loan_$id').delete();
+    } catch (e) {
+      debugPrint('Cloud delete loan error: $e');
     }
   }
 
@@ -485,6 +545,14 @@ class AppState extends ChangeNotifier {
       await _firestore?.collection('staff').doc('staff_${s.username}').set(s.toMap());
     } catch (e) {
       debugPrint('Cloud save staff error: $e');
+    }
+  }
+
+  Future<void> deleteStaffFromCloud(String username) async {
+    try {
+      await _firestore?.collection('staff').doc('staff_$username').delete();
+    } catch (e) {
+      debugPrint('Cloud delete staff error: $e');
     }
   }
 
@@ -670,6 +738,7 @@ class AppState extends ChangeNotifier {
     final idx = staffList.indexWhere((s) => s.id == currentUser!.id && s.branchId == currentUser!.branchId);
     if (idx != -1) {
       staffList[idx].password = newPass.trim();
+      saveStaffToCloud(staffList[idx]);
     }
     notifyListeners();
     return null;
@@ -1317,7 +1386,7 @@ class _AppShellState extends State<AppShell> {
               ],
             ),
           ),
-          if (isWide)
+          if (isWide) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
@@ -1327,6 +1396,39 @@ class _AppShellState extends State<AppShell> {
               child: Text(todayFormatted(),
                   style: const TextStyle(fontSize: 13, color: C.textMuted)),
             ),
+            const SizedBox(width: 10),
+          ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: appState.isFirebaseConnected ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: appState.isFirebaseConnected ? const Color(0xFFA7F3D0) : C.border,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  appState.isFirebaseConnected ? Icons.cloud_done : Icons.cloud_off,
+                  size: 15,
+                  color: appState.isFirebaseConnected ? C.success : C.textMuted,
+                ),
+                if (isWide) ...[
+                  const SizedBox(width: 5),
+                  Text(
+                    appState.isFirebaseConnected ? 'Cloud Synced' : 'Offline Mode',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: appState.isFirebaseConnected ? C.success : C.textMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
           const SizedBox(width: 12),
           PopupMenuButton<String>(
             tooltip: 'Account Menu',
@@ -2040,7 +2142,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           const SnackBar(content: Text('Assign a branch to this customer')));
       return;
     }
-    appState.customers.add(Customer(
+    final newCust = Customer(
       id: appState.nextCustomerIdFor(targetBranch),
       firstName: _firstName.text.trim(),
       lastName: _lastName.text.trim(),
@@ -2066,7 +2168,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
       guarantorLocation: _gLocation.text.trim(),
       guarantorPhoto: _guarantorBytes,
       branchId: targetBranch,
-    ));
+    );
+    appState.customers.add(newCust);
+    appState.saveCustomerToCloud(newCust);
     for (final c in [_firstName, _lastName, _phone, _district, _income,
       _occupation, _placeOfWork, _idNumber, _email,
       _gFirstName, _gLastName, _gPhone, _gDistrict, _gIncome,
@@ -2099,10 +2203,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         TextButton(onPressed: () {
+          final loansToDelete = appState.loans.where((l) =>
+              l.customerId == id && l.branchId == branchId).toList();
+          for (final l in loansToDelete) {
+            appState.deleteLoanFromCloud(l.id);
+          }
           appState.loans.removeWhere((l) =>
               l.customerId == id && l.branchId == branchId);
           appState.customers.removeWhere((c) =>
               c.id == id && c.branchId == branchId);
+          appState.deleteCustomerFromCloud(id);
           appState.refresh();
           Navigator.pop(context);
         }, child: const Text('Delete', style: TextStyle(color: C.danger))),
@@ -2684,6 +2794,397 @@ class _CustomerHistoryDialogState extends State<_CustomerHistoryDialog> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  PDF HELPERS (Legal Loan Agreement Contract & Repayment Receipt)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class LoanContractPdfHelper {
+  static Future<void> printContract(BuildContext context, Loan loan, Customer? customer) async {
+    try {
+      final doc = pw.Document();
+      final branch = appState.branches.firstWhere(
+        (b) => b.id == loan.branchId,
+        orElse: () => Branch(id: 0, name: 'Main Branch', location: 'Arua', manager: 'Manager'),
+      );
+      final cust = customer ?? appState.customers.firstWhere(
+        (c) => c.id == loan.customerId && c.branchId == loan.branchId,
+        orElse: () => Customer(id: 0, firstName: loan.customerName, lastName: '', phone: '-', district: '-', monthlyIncome: 0),
+      );
+
+      doc.addPage(pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context ctx) => [
+          // Header
+          pw.Container(
+            padding: const pw.EdgeInsets.only(bottom: 12),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(bottom: pw.BorderSide(color: PdfColors.brown800, width: 2)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('QUADRATIC FINANCIAL SERVICES',
+                        style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.brown900)),
+                    pw.SizedBox(height: 3),
+                    pw.Text('LEGAL LOAN AGREEMENT & PROMISSORY CONTRACT',
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
+                    pw.Text('Licensed Money Lending Institution | Arua, Uganda | Tel: +256 775 638 056',
+                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                  ],
+                ),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.brown50,
+                    border: pw.Border.all(color: PdfColors.brown800),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('Loan Ref: #${loan.id}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.brown900)),
+                      pw.Text('Branch: ${branch.name}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
+                      pw.Text('Date: ${loan.loanDate}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 12),
+
+          // Section 1: Borrower Particulars
+          _sectionHeader('1. BORROWER PARTICULARS'),
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            children: [
+              _infoRow('Full Legal Name', cust.fullName, 'National ID (NIN)', cust.idNumber.isNotEmpty ? cust.idNumber : '-'),
+              _infoRow('Phone Number', cust.phone, 'Residential District', cust.district.isNotEmpty ? cust.district : '-'),
+              _infoRow('Occupation', cust.occupation.isNotEmpty ? cust.occupation : '-', 'Place of Work', cust.placeOfWork.isNotEmpty ? cust.placeOfWork : '-'),
+              _infoRow('Business Name', loan.businessName.isNotEmpty ? loan.businessName : '-', 'Business Location', '${loan.businessDistrict} ${loan.businessLocation}'.trim()),
+            ],
+          ),
+          pw.SizedBox(height: 10),
+
+          // Section 2: Loan Financial Terms
+          _sectionHeader('2. LOAN TERMS & FINANCIAL SCHEDULE'),
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            children: [
+              _infoRow('Principal Disbursed', 'UGX ${fmt(loan.amount)}', 'Amount in Words', loan.loanAmountWords.isNotEmpty ? loan.loanAmountWords : 'UGX ${fmt(loan.amount)}'),
+              _infoRow('Interest Rate', '${loan.rate}% flat', 'Processing Fee', 'UGX ${fmt(loan.processingFee)}'),
+              _infoRow('Repayment Frequency', loan.frequency, 'Tenure Duration', '${loan.tenure} ${loan.frequency == "Daily" ? "Days" : (loan.frequency == "Weekly" ? "Weeks" : "Months")}'),
+              _infoRow('Periodic Installment (EMI)', 'UGX ${fmt(loan.emi)}', 'Total Payable', 'UGX ${fmt(loan.emi * loan.tenure)}'),
+            ],
+          ),
+          pw.SizedBox(height: 10),
+
+          // Section 3: Collateral / Security Pledged
+          _sectionHeader('3. COLLATERAL & SECURITY PLEDGED'),
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            children: [
+              _infoRow('Pledged Property / Asset', loan.securityProperty.isNotEmpty ? loan.securityProperty : 'None specified', 'Security NIN Record', loan.securityNIN.isNotEmpty ? loan.securityNIN : '-'),
+              _infoRow('Motor Vehicle / Motorcycle', loan.securityVehicle.isNotEmpty ? loan.securityVehicle : 'None', 'Vehicle Registration No.', loan.securityVehicleReg.isNotEmpty ? loan.securityVehicleReg : '-'),
+            ],
+          ),
+          pw.SizedBox(height: 10),
+
+          // Section 4: Guarantor Particulars
+          _sectionHeader('4. GUARANTOR DETAILS'),
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            children: [
+              _infoRow('Guarantor Full Name', cust.guarantorName.isNotEmpty ? cust.guarantorName : 'Not Registered', 'Guarantor Phone', cust.guarantorPhone.isNotEmpty ? cust.guarantorPhone : '-'),
+              _infoRow('Guarantor NIN', cust.guarantorIdNumber.isNotEmpty ? cust.guarantorIdNumber : '-', 'District / Residence', '${cust.guarantorDistrict} ${cust.guarantorLocation}'.trim()),
+              _infoRow('Guarantor Occupation', cust.guarantorOccupation.isNotEmpty ? cust.guarantorOccupation : '-', 'Guarantor Workplace', cust.guarantorPlaceOfWork.isNotEmpty ? cust.guarantorPlaceOfWork : '-'),
+            ],
+          ),
+          pw.SizedBox(height: 10),
+
+          // Section 5: Legal Declaration & Covenants
+          _sectionHeader('5. DECLARATION, COVENANTS & DEFAULT RECOVERY CLAUSES'),
+          pw.Container(
+            padding: const pw.EdgeInsets.all(8),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  '1. The Borrower acknowledges receipt of the full principal loan sum in good order and covenants to remit all installments punctually on or before the due date as stated above.',
+                  style: const pw.TextStyle(fontSize: 8.5),
+                ),
+                pw.SizedBox(height: 3),
+                pw.Text(
+                  '2. In the event of default or late payment exceeding seven (7) days, the lender reserves the irrevocable right to attach, impound, and liquidate the pledged collateral assets to recover all outstanding principal, interest, legal costs, and penalty charges without prejudice to formal court litigation.',
+                  style: const pw.TextStyle(fontSize: 8.5),
+                ),
+                pw.SizedBox(height: 3),
+                pw.Text(
+                  '3. The Guarantor unconditionally affirms this obligation and binds themselves jointly and severally as principal debtor to make complete restitution should the borrower default for any reason.',
+                  style: const pw.TextStyle(fontSize: 8.5),
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 14),
+
+          // Signatures: 3 Boxes side by side
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              _sigBox('BORROWER', cust.fullName),
+              _sigBox('GUARANTOR', cust.guarantorName.isNotEmpty ? cust.guarantorName : 'Guarantor'),
+              _sigBox('LENDER OFFICIAL', '${loan.approverName.isNotEmpty ? loan.approverName : appState.currentUserName} (${loan.approverTitle.isNotEmpty ? loan.approverTitle : Role.label(appState.currentRole)})'),
+            ],
+          ),
+          pw.SizedBox(height: 12),
+          pw.Center(
+            child: pw.Text('© 2026 QUADRATIC FINANCIAL SERVICES — Official Legal Instrument',
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+          ),
+        ],
+      ));
+
+      await Printing.layoutPdf(
+        onLayout: (format) async => doc.save(),
+        name: 'Loan_Agreement_${loan.id}_${cust.lastName}',
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Contract Print Error: $e')));
+    }
+  }
+
+  static pw.Widget _sectionHeader(String text) {
+    return pw.Container(
+      width: double.infinity,
+      color: PdfColors.brown800,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      margin: const pw.EdgeInsets.only(bottom: 4),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+      ),
+    );
+  }
+
+  static pw.TableRow _infoRow(String label1, String val1, String label2, String val2) {
+    return pw.TableRow(
+      children: [
+        pw.Padding(
+          padding: const pw.EdgeInsets.all(5),
+          child: pw.RichText(
+            text: pw.TextSpan(children: [
+              pw.TextSpan(text: '$label1: ', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
+              pw.TextSpan(text: val1, style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.black)),
+            ]),
+          ),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.all(5),
+          child: pw.RichText(
+            text: pw.TextSpan(children: [
+              pw.TextSpan(text: '$label2: ', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
+              pw.TextSpan(text: val2, style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.black)),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static pw.Widget _sigBox(String role, String name) {
+    return pw.Container(
+      width: 165,
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey400, width: 0.8),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(role, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.brown900)),
+          pw.SizedBox(height: 2),
+          pw.Text(name, maxLines: 1, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
+          pw.SizedBox(height: 24),
+          pw.Container(height: 0.5, color: PdfColors.grey600),
+          pw.SizedBox(height: 3),
+          pw.Text('Signature & Date / Stamp', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
+        ],
+      ),
+    );
+  }
+}
+
+class ReceiptPdfHelper {
+  static Future<void> printReceipt(
+    BuildContext context, {
+    required Loan loan,
+    required Payment payment,
+    required num previousBalance,
+    required num remainingBalance,
+  }) async {
+    try {
+      final doc = pw.Document();
+      final branch = appState.branches.firstWhere(
+        (b) => b.id == loan.branchId,
+        orElse: () => Branch(id: 0, name: 'Main Branch', location: 'Arua', manager: 'Manager'),
+      );
+      final receiptNo = 'REC-${loan.id}-${payment.timestamp.millisecondsSinceEpoch.toString().substring(7)}';
+
+      doc.addPage(pw.Page(
+        pageFormat: PdfPageFormat.a5,
+        margin: const pw.EdgeInsets.all(24),
+        build: (pw.Context ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // Header
+            pw.Container(
+              padding: const pw.EdgeInsets.only(bottom: 8),
+              decoration: const pw.BoxDecoration(
+                border: pw.Border(bottom: pw.BorderSide(color: PdfColors.brown800, width: 1.5)),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('QUADRATIC FINANCIAL SERVICES',
+                          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.brown900)),
+                      pw.SizedBox(height: 2),
+                      pw.Text('OFFICIAL REPAYMENT RECEIPT VOUCHER',
+                          style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
+                      pw.Text('Branch: ${branch.name} | Contact: +256 775 638 056',
+                          style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                    ],
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.green50,
+                      border: pw.Border.all(color: PdfColors.green800),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                    ),
+                    child: pw.Text(
+                      loan.status == 'paid' ? 'PAID IN FULL' : 'REPAYMENT ACKNOWLEDGED',
+                      style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: PdfColors.green900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+
+            // Metadata row
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Receipt No: $receiptNo', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Date & Time: ${payment.timestamp.toString().substring(0, 16)}', style: const pw.TextStyle(fontSize: 9)),
+              ],
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text('Received From: ${loan.customerName} (Loan #${loan.id})',
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.brown900)),
+            pw.SizedBox(height: 12),
+
+            // Financial Summary
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+              children: [
+                _receiptRow('Total Loan Borrowed', 'UGX ${fmt(loan.amount)}', isHeader: true),
+                _receiptRow('Previous Outstanding Balance', 'UGX ${fmt(previousBalance)}'),
+                _receiptRow('AMOUNT RECEIVED NOW', 'UGX ${fmt(payment.amount)}', highlight: true),
+                _receiptRow('Remaining Outstanding Balance', 'UGX ${fmt(remainingBalance)}'),
+                _receiptRow('Loan Status', loan.status.toUpperCase()),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+
+            // Served by and signature
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('Served By: ${appState.currentUserName}', style: const pw.TextStyle(fontSize: 8.5)),
+                    pw.Text('Role: ${Role.label(appState.currentRole)}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Container(width: 120, height: 0.5, color: PdfColors.grey600),
+                    pw.SizedBox(height: 2),
+                    pw.Text('Cashier / Officer Signature & Stamp', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
+                  ],
+                ),
+              ],
+            ),
+            pw.Spacer(),
+            pw.Center(
+              child: pw.Text('Thank you for banking with Quadratic Financial Services.',
+                  style: pw.TextStyle(fontSize: 8.5, fontStyle: pw.FontStyle.italic, color: PdfColors.grey700)),
+            ),
+          ],
+        ),
+      ));
+
+      await Printing.layoutPdf(
+        onLayout: (format) async => doc.save(),
+        name: 'Receipt_${loan.id}_${loan.customerName}',
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Receipt Print Error: $e')));
+    }
+  }
+
+  static pw.TableRow _receiptRow(String title, String value, {bool isHeader = false, bool highlight = false}) {
+    return pw.TableRow(
+      decoration: pw.BoxDecoration(
+        color: highlight ? PdfColors.green50 : (isHeader ? PdfColors.grey100 : PdfColors.white),
+      ),
+      children: [
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: pw.Text(
+            title,
+            style: pw.TextStyle(
+              fontSize: 9,
+              fontWeight: highlight || isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+              color: highlight ? PdfColors.green900 : PdfColors.black,
+            ),
+          ),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: pw.Text(
+            value,
+            textAlign: pw.TextAlign.right,
+            style: pw.TextStyle(
+              fontSize: 9,
+              fontWeight: highlight || isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+              color: highlight ? PdfColors.green900 : PdfColors.black,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  4. LOANS
 // ═══════════════════════════════════════════════════════════════════════════
 class LoansScreen extends StatefulWidget {
@@ -2776,7 +3277,8 @@ class _LoansScreenState extends State<LoansScreen> {
     final emi = AppState.calculatePayment(amount, rate, tenure, _frequency);
     final iso = isoDate(DateTime.now());
 
-    appState.loans.add(Loan(
+    final appliedCust = _selectedCustomer;
+    final newLoan = Loan(
       id: appState.nextLoanIdFor(_selectedCustomer!.branchId),
       customerId: _selectedCustomer!.id,
       customerName: _selectedCustomer!.fullName,
@@ -2795,7 +3297,9 @@ class _LoansScreenState extends State<LoansScreen> {
       securityVehicleReg: _securityVehicleReg.text,
       securityNIN: _securityNIN.text,
       branchId: _selectedCustomer!.branchId,
-    ));
+    );
+    appState.loans.add(newLoan);
+    appState.saveLoanToCloud(newLoan);
 
     for (final c in [_businessName, _businessDistrict, _businessLocation,
       _businessNearby, _loanAmountFigures, _loanAmountWords, _processingFee,
@@ -2807,6 +3311,36 @@ class _LoansScreenState extends State<LoansScreen> {
     });
     appState.refresh();
     _snack('✅ Loan applied — awaiting payment');
+
+    if (appliedCust != null) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('📄 Loan Agreement & Contract'),
+          content: Text(
+            'Loan #${newLoan.id} for ${newLoan.customerName} (UGX ${fmt(newLoan.amount)}) was registered.\n\nPrint or preview the legal loan contract now?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Later'),
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.print, size: 16),
+              label: const Text('Print Contract'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: C.primary,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                LoanContractPdfHelper.printContract(context, newLoan, appliedCust);
+              },
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   void _snack(String msg) => ScaffoldMessenger.of(context)
@@ -2996,7 +3530,7 @@ class _LoansScreenState extends State<LoansScreen> {
                 child: Text('No loans', style: TextStyle(color: C.textFaint)))
                 : SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: DataTable(columnSpacing: 20, columns: const [
+              child: DataTable(columnSpacing: 18, columns: const [
                 DataColumn(label: Text('ID')),
                 DataColumn(label: Text('CUSTOMER')),
                 DataColumn(label: Text('BORROWED')),
@@ -3006,6 +3540,7 @@ class _LoansScreenState extends State<LoansScreen> {
                 DataColumn(label: Text('EMI')),
                 DataColumn(label: Text('BALANCE')),
                 DataColumn(label: Text('STATUS')),
+                DataColumn(label: Text('CONTRACT')),
               ], rows: allLoans.map((l) {
                 final bal = AppState.outstandingBalance(l);
                 return DataRow(cells: [
@@ -3020,6 +3555,16 @@ class _LoansScreenState extends State<LoansScreen> {
                   DataCell(Text('UGX ${fmt(l.emi)}')),
                   DataCell(Text('UGX ${fmt(bal)}')),
                   DataCell(StatusBadge(l.status)),
+                  DataCell(OutlinedButton.icon(
+                    onPressed: () => LoanContractPdfHelper.printContract(context, l, null),
+                    icon: const Icon(Icons.description, size: 14),
+                    label: const Text('Contract', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: C.primary,
+                      side: const BorderSide(color: C.primary),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
+                  )),
                 ]);
               }).toList()),
             ),
@@ -3128,19 +3673,56 @@ class PaymentsScreen extends StatelessWidget {
           style: ElevatedButton.styleFrom(
               backgroundColor: C.success, foregroundColor: Colors.white),
           onPressed: () {
+            final prevBal = AppState.outstandingBalance(loan);
             final amt = num.tryParse(amountCtrl.text) ?? 0;
             if (amt <= 0) return;
-            loan.payments.add(Payment(amt, DateTime.now()));
+            final p = Payment(amt, DateTime.now());
+            loan.payments.add(p);
             final bal = AppState.outstandingBalance(loan);
             if (bal <= 0) {
               loan.status = 'paid';
             } else {
               loan.status = AppState.overdueDays(loan) > 0 ? 'overdue' : 'pending';
             }
+            appState.saveLoanToCloud(loan);
             appState.refresh();
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('✅ Payment recorded')));
+
+            showDialog(
+              context: context,
+              builder: (_) => AlertDialog(
+                title: const Text('🧾 Official Payment Receipt'),
+                content: Text(
+                  'Payment of UGX ${fmt(amt)} recorded for ${loan.customerName}.\nRemaining Balance: UGX ${fmt(bal)}.\n\nPrint or preview the official receipt voucher now?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.receipt_long, size: 16),
+                    label: const Text('Print Receipt'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: C.success,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      ReceiptPdfHelper.printReceipt(
+                        context,
+                        loan: loan,
+                        payment: p,
+                        previousBalance: prevBal,
+                        remainingBalance: bal,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            );
           },
           child: const Text('Confirm'),
         ),
@@ -3572,13 +4154,15 @@ class _DailyWorkAccountabilityBodyState extends State<_DailyWorkAccountabilityBo
               if (reasonCtrl.text.isNotEmpty && amt > 0 &&
                   DateTime.tryParse(dateIso) != null) {
                 final targetBranch = appState.activeBranchId;
-                appState.expenses.add(DailyExpense(
+                final newExp = DailyExpense(
                   id: appState.nextExpenseIdFor(targetBranch),
                   date: dateIso,
                   description: reasonCtrl.text.trim(),
                   amount: amt,
                   branchId: targetBranch,
-                ));
+                );
+                appState.expenses.add(newExp);
+                appState.saveExpenseToCloud(newExp);
                 appState.refresh();
                 Navigator.pop(ctx);
               }
@@ -3618,16 +4202,18 @@ class BranchesScreen extends StatelessWidget {
           onPressed: () {
             if (nameCtrl.text.isEmpty || locationCtrl.text.isEmpty) return;
             final newId = appState.nextBranchId++;
-            appState.branches.add(Branch(
+            final newBranch = Branch(
               id: newId,
               name: nameCtrl.text.trim(),
               location: locationCtrl.text.trim(),
               manager: appState.currentUserName,
-            ));
+            );
+            appState.branches.add(newBranch);
             appState._branchCustomerCounter[newId] = 1;
             appState._branchStaffCounter[newId] = 1;
             appState._branchLoanCounter[newId] = 1;
             appState._branchExpenseCounter[newId] = 1;
+            appState.saveBranchToCloud(newBranch);
             appState.refresh();
             Navigator.pop(context);
           },
@@ -4393,7 +4979,7 @@ class _BranchShellState extends State<BranchShell> {
               ],
             ),
           ),
-          if (isWide)
+          if (isWide) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
@@ -4403,6 +4989,39 @@ class _BranchShellState extends State<BranchShell> {
               child: Text(todayFormatted(),
                   style: const TextStyle(fontSize: 13, color: C.textMuted)),
             ),
+            const SizedBox(width: 10),
+          ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: appState.isFirebaseConnected ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: appState.isFirebaseConnected ? const Color(0xFFA7F3D0) : C.border,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  appState.isFirebaseConnected ? Icons.cloud_done : Icons.cloud_off,
+                  size: 15,
+                  color: appState.isFirebaseConnected ? C.success : C.textMuted,
+                ),
+                if (isWide) ...[
+                  const SizedBox(width: 5),
+                  Text(
+                    appState.isFirebaseConnected ? 'Cloud Synced' : 'Offline Mode',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: appState.isFirebaseConnected ? C.success : C.textMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
           const SizedBox(width: 12),
           PopupMenuButton<String>(
             tooltip: 'Account Menu',
@@ -4573,6 +5192,7 @@ class StaffScreen extends StatelessWidget {
                           TextButton(
                             onPressed: () {
                               s.status = 'Inactive';
+                              appState.saveStaffToCloud(s);
                               appState.refresh();
                             },
                             child: const Text('Deactivate',
@@ -4582,6 +5202,7 @@ class StaffScreen extends StatelessWidget {
                           TextButton(
                             onPressed: () {
                               s.status = 'Active';
+                              appState.saveStaffToCloud(s);
                               appState.refresh();
                             },
                             child: const Text('Activate',
@@ -4592,6 +5213,7 @@ class StaffScreen extends StatelessWidget {
                             onPressed: () {
                               appState.staffList.removeWhere((x) =>
                                   x.id == s.id && x.branchId == s.branchId);
+                              appState.deleteStaffFromCloud(s.username);
                               appState.refresh();
                             },
                           ),
@@ -4764,7 +5386,7 @@ class StaffScreen extends StatelessWidget {
                     const SnackBar(content: Text('Staff photo required')));
                 return;
               }
-              appState.staffList.add(Staff(
+              final newStaff = Staff(
                 id: appState.nextStaffIdFor(branchId),
                 fullName: name.text,
                 email: email.text,
@@ -4777,7 +5399,9 @@ class StaffScreen extends StatelessWidget {
                 dob: dob.text,
                 branchId: branchId,
                 photo: photoBytes,
-              ));
+              );
+              appState.staffList.add(newStaff);
+              appState.saveStaffToCloud(newStaff);
               appState.refresh();
               Navigator.pop(ctx);
             },
