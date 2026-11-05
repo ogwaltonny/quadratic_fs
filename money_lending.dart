@@ -670,25 +670,22 @@ const _reportSubs = <_ReportSub>[
 
 // ─── Shared avatar widget ────────────────────────────────────────────────
 class _UserAvatar extends StatelessWidget {
-  final double radius;
-  final Color bg;
-  final Color fg;
-  const _UserAvatar({this.radius = 18, this.bg = C.accent, this.fg = C.primary});
+  const _UserAvatar();
 
   @override
   Widget build(BuildContext context) {
     final photo = appState.currentUserPhoto;
     if (photo != null) {
       return CircleAvatar(
-        radius: radius,
-        backgroundColor: bg,
+        radius: 18,
+        backgroundColor: C.accent,
         backgroundImage: MemoryImage(photo),
       );
     }
     return CircleAvatar(
-      radius: radius,
-      backgroundColor: bg,
-      foregroundColor: fg,
+      radius: 18,
+      backgroundColor: C.accent,
+      foregroundColor: C.primary,
       child: Text(appState.currentUserAvatar,
           style: const TextStyle(fontWeight: FontWeight.w700)),
     );
@@ -749,6 +746,16 @@ class _AppShellState extends State<AppShell> {
     return const DashboardScreen();
   }
 
+  int _getBottomNavIndex(String p) {
+    switch (p) {
+      case 'dashboard': return 0;
+      case 'customers': return 1;
+      case 'loans': return 2;
+      case 'payments': return 3;
+      default: return 4;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final w = MediaQuery.of(context).size.width;
@@ -769,6 +776,31 @@ class _AppShellState extends State<AppShell> {
               ],
             ),
           ),
+        ],
+      ),
+      bottomNavigationBar: isWide ? null : BottomNavigationBar(
+        currentIndex: _getBottomNavIndex(page),
+        onTap: (index) {
+          switch (index) {
+            case 0: go('dashboard'); break;
+            case 1: go('customers'); break;
+            case 2: go('loans'); break;
+            case 3: go('payments'); break;
+            case 4: _scaffoldKey.currentState?.openDrawer(); break;
+          }
+        },
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: C.primary,
+        unselectedItemColor: C.textMuted,
+        backgroundColor: Colors.white,
+        selectedFontSize: 11,
+        unselectedFontSize: 11,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline), activeIcon: Icon(Icons.pie_chart), label: 'Dashboard'),
+          BottomNavigationBarItem(icon: Icon(Icons.people_outline), activeIcon: Icon(Icons.people), label: 'Customers'),
+          BottomNavigationBarItem(icon: Icon(Icons.description_outlined), activeIcon: Icon(Icons.description), label: 'Loans'),
+          BottomNavigationBarItem(icon: Icon(Icons.payments_outlined), activeIcon: Icon(Icons.payments), label: 'Payments'),
+          BottomNavigationBarItem(icon: Icon(Icons.menu), label: 'More'),
         ],
       ),
     );
@@ -892,9 +924,17 @@ class _AppShellState extends State<AppShell> {
               const Icon(Icons.payments, color: C.accent, size: 28),
               const SizedBox(width: 10),
               const Expanded(
-                child: Text('QUADRATIC',
-                    style: TextStyle(color: Colors.white, fontSize: 18,
-                        fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                child: Row(
+                  children: [
+                    Text('QUADRATIC',
+                        style: TextStyle(color: Colors.white, fontSize: 17,
+                            fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                    SizedBox(width: 6),
+                    Text('FS',
+                        style: TextStyle(color: C.accent, fontSize: 17,
+                            fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                  ],
+                ),
               ),
             ]),
           ),
@@ -952,9 +992,26 @@ class _AppShellState extends State<AppShell> {
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
             ),
           Expanded(
-            child: Text(titles[page] ?? '',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700,
-                    color: C.textPrimary)),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(titles[page] ?? '',
+                      style: TextStyle(fontSize: isWide ? 20 : 17, fontWeight: FontWeight.w700,
+                          color: C.textPrimary),
+                      overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: C.primary,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text('FS',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: C.accent, letterSpacing: 0.5)),
+                ),
+              ],
+            ),
           ),
           if (isWide)
             Container(
@@ -1030,9 +1087,17 @@ class _AppShellState extends State<AppShell> {
             child: Row(children: [
               const Icon(Icons.payments, color: C.accent, size: 28),
               const SizedBox(width: 10),
-              const Text('QUADRATIC',
-                  style: TextStyle(color: Colors.white, fontSize: 18,
-                      fontWeight: FontWeight.w700)),
+              const Row(
+                children: [
+                  Text('QUADRATIC',
+                      style: TextStyle(color: Colors.white, fontSize: 18,
+                          fontWeight: FontWeight.w800)),
+                  SizedBox(width: 6),
+                  Text('FS',
+                      style: TextStyle(color: C.accent, fontSize: 18,
+                          fontWeight: FontWeight.w900)),
+                ],
+              ),
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.close, color: Colors.white70),
@@ -1058,9 +1123,12 @@ class SectionTitle extends StatelessWidget {
     child: Row(children: [
       Text(icon, style: const TextStyle(fontSize: 18)),
       const SizedBox(width: 8),
-      Text(text,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
-              color: C.textPrimary)),
+      Expanded(
+        child: Text(text,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
+                color: C.textPrimary),
+            overflow: TextOverflow.ellipsis),
+      ),
     ]),
   );
 }
@@ -1071,44 +1139,96 @@ class StatCard extends StatelessWidget {
   final String? change;
   final bool negative;
   final VoidCallback? onTap;
-  const StatCard({super.key, required this.label, required this.value,
-    this.change, this.negative = false, this.onTap});
+  final IconData? icon;
+  final Color? iconColor;
+
+  const StatCard({
+    super.key,
+    required this.label,
+    required this.value,
+    this.change,
+    this.negative = false,
+    this.onTap,
+    this.icon,
+    this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
     final card = Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isMobile ? 12 : 18),
       decoration: BoxDecoration(
         color: C.card,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: onTap != null ? C.accent : C.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Row(children: [
+            if (icon != null) ...[
+              Container(
+                padding: EdgeInsets.all(isMobile ? 4 : 6),
+                decoration: BoxDecoration(
+                  color: (iconColor ?? C.primary).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: isMobile ? 14 : 16, color: iconColor ?? C.primary),
+              ),
+              const SizedBox(width: 6),
+            ],
             Expanded(
-              child: Text(label,
-                  style: const TextStyle(fontSize: 13,
-                      color: C.textMuted, fontWeight: FontWeight.w500)),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: isMobile ? 11 : 13,
+                  color: C.textMuted,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
             if (onTap != null) const Icon(Icons.edit, size: 14, color: C.accent),
           ]),
-          const SizedBox(height: 6),
-          Text(value,
-              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700,
-                  color: C.textPrimary)),
+          SizedBox(height: isMobile ? 4 : 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: isMobile ? 19 : 26,
+                fontWeight: FontWeight.w700,
+                color: C.textPrimary,
+              ),
+            ),
+          ),
           if (change != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: negative ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: Text(change!,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500,
-                      color: negative ? C.danger : C.success)),
+              child: Text(
+                change!,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: negative ? C.danger : C.success,
+                ),
+              ),
             ),
           ],
         ],
@@ -1116,7 +1236,10 @@ class StatCard extends StatelessWidget {
     );
     if (onTap == null) return card;
     return InkWell(
-      onTap: onTap, borderRadius: BorderRadius.circular(16), child: card);
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: card,
+    );
   }
 }
 
@@ -1179,8 +1302,9 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
     return Container(
-      margin: const EdgeInsets.only(bottom: 24),
+      margin: EdgeInsets.only(bottom: isMobile ? 16 : 24),
       decoration: BoxDecoration(
         color: C.card,
         borderRadius: BorderRadius.circular(16),
@@ -1190,15 +1314,23 @@ class SectionCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 14 : 20,
+              vertical: isMobile ? 12 : 16,
+            ),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: C.border)),
             ),
             child: Text(title,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600,
+                style: TextStyle(
+                    fontSize: isMobile ? 14 : 15,
+                    fontWeight: FontWeight.w600,
                     color: C.textPrimary)),
           ),
-          Padding(padding: const EdgeInsets.all(20), child: child),
+          Padding(
+            padding: EdgeInsets.all(isMobile ? 12 : 20),
+            child: child,
+          ),
         ],
       ),
     );
@@ -1209,10 +1341,13 @@ class PageWrap extends StatelessWidget {
   final List<Widget> children;
   const PageWrap({super.key, required this.children});
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(24),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
-  );
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    return Padding(
+      padding: EdgeInsets.all(isMobile ? 12 : 24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1330,39 +1465,151 @@ class DashboardScreen extends StatelessWidget {
         final recent = loans.reversed.take(5).toList();
 
         return PageWrap(children: [
-          LayoutBuilder(builder: (_, c) {
-            final cols = c.maxWidth > 900 ? 4 : (c.maxWidth > 500 ? 2 : 1);
+          LayoutBuilder(builder: (context, c) {
+            final isPhone = c.maxWidth < 600;
+            final isTablet = c.maxWidth >= 600 && c.maxWidth < 950;
+            final cols = isPhone ? 2 : (isTablet ? 2 : 4);
             return GridView.count(
               crossAxisCount: cols,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 1.6,
+              mainAxisSpacing: isPhone ? 10 : 16,
+              crossAxisSpacing: isPhone ? 10 : 16,
+              childAspectRatio: isPhone ? 1.55 : 1.7,
               children: [
-                StatCard(label: 'Total Customers', value: '$customers'),
-                StatCard(label: 'Pending Loans', value: '$pending'),
-                StatCard(label: 'Overdue Loans', value: '$overdue'),
-                StatCard(label: 'Paid Loans', value: '$paid'),
+                StatCard(
+                  label: 'Total Customers',
+                  value: '$customers',
+                  icon: Icons.people_outline,
+                  iconColor: const Color(0xFF2563EB),
+                ),
+                StatCard(
+                  label: 'Pending Loans',
+                  value: '$pending',
+                  icon: Icons.hourglass_top,
+                  iconColor: const Color(0xFFD97706),
+                ),
+                StatCard(
+                  label: 'Overdue Loans',
+                  value: '$overdue',
+                  icon: Icons.warning_amber_rounded,
+                  iconColor: const Color(0xFFDC2626),
+                ),
+                StatCard(
+                  label: 'Paid Loans',
+                  value: '$paid',
+                  icon: Icons.check_circle_outline,
+                  iconColor: const Color(0xFF16A34A),
+                ),
               ],
             );
           }),
-          const SizedBox(height: 24),
-          SectionCard(title: '🕐 Recent Loans', child: _recentTable(recent)),
+          const SizedBox(height: 20),
+          SectionCard(
+            title: '🕐 Recent Loans',
+            child: Builder(builder: (ctx) => _recentTable(ctx, recent)),
+          ),
         ]);
       },
     );
   }
 
-  Widget _recentTable(List<Loan> list) {
+  Widget _recentTable(BuildContext context, List<Loan> list) {
     if (list.isEmpty) {
       return const Center(child: Padding(padding: EdgeInsets.all(20),
           child: Text('No recent loans', style: TextStyle(color: C.textFaint))));
     }
-    return SizedBox(
-      width: double.infinity,
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    if (isMobile) {
+      return Column(
+        children: list.map((l) => Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: C.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: C.border),
+                    ),
+                    child: Text(
+                      'Loan #${l.id}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: C.textPrimary),
+                    ),
+                  ),
+                  StatusBadge(l.status),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.person, size: 15, color: C.textMuted),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      l.customerName,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: C.textPrimary),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 16, color: C.border),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Amount', style: TextStyle(fontSize: 11, color: C.textMuted)),
+                        const SizedBox(height: 2),
+                        Text(
+                          'UGX ${fmt(l.amount)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: C.primary),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('EMI', style: TextStyle(fontSize: 11, color: C.textMuted)),
+                        const SizedBox(height: 2),
+                        Text(
+                          'UGX ${fmt(l.emi)}',
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: C.textPrimary),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  FreqBadge(l.frequency),
+                ],
+              ),
+            ],
+          ),
+        )).toList(),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: DataTable(
-        columnSpacing: 32,
+        columnSpacing: 28,
         headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
         columns: const [
           DataColumn(label: Text('ID')),
@@ -1695,8 +1942,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     child: Text('No customers found',
                         style: TextStyle(color: C.textFaint)))
               else
-                SizedBox(
-                  width: double.infinity,
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
                   child: DataTable(columnSpacing: 20, columns: [
                     const DataColumn(label: Text('PHOTO')),
                     const DataColumn(label: Text('ID')),
@@ -2029,7 +2276,6 @@ class _CustomerHistoryDialogState extends State<_CustomerHistoryDialog> {
                   final kind = r['kind'] as String;
                   final loan = r['loan'] as Loan;
                   final payment = r['payment'] as Payment?;
-                  final borrowedRunning = r['borrowedRunning'] as num;
                   final balance = r['balanceAfter'] as num;
 
                   // Amount Borrowed column
@@ -2514,9 +2760,9 @@ class PaymentsScreen extends StatelessWidget {
                   ? const Padding(padding: EdgeInsets.all(20),
                   child: Text('No pending loans',
                       style: TextStyle(color: C.textFaint)))
-                  : SizedBox(
-                width: double.infinity,
-                child: DataTable(columnSpacing: 32, columns: const [
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(columnSpacing: 24, columns: const [
                   DataColumn(label: Text('ID')),
                   DataColumn(label: Text('CUSTOMER')),
                   DataColumn(label: Text('EMI')),
@@ -2878,25 +3124,27 @@ class _DailyWorkAccountabilityBodyState extends State<_DailyWorkAccountabilityBo
             ]),
           ),
           LayoutBuilder(builder: (_, c) {
-            final cols = c.maxWidth > 900 ? 3 : (c.maxWidth > 500 ? 2 : 1);
+            final isPhone = c.maxWidth < 600;
+            final cols = c.maxWidth > 900 ? 3 : 2;
             return GridView.count(
               crossAxisCount: cols,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 2.0,
+              mainAxisSpacing: isPhone ? 10 : 16,
+              crossAxisSpacing: isPhone ? 10 : 16,
+              childAspectRatio: isPhone ? 1.55 : 2.0,
               children: [
-                StatCard(label: 'Opening Balance (Est.)', value: 'UGX 0'),
-                StatCard(label: 'Cash Collected', value: 'UGX ${fmt(cashCollected)}'),
-                StatCard(label: 'Processing Fees', value: 'UGX ${fmt(processingFees)}'),
-                StatCard(label: 'Loans Distributed', value: 'UGX ${fmt(loansDistributed)}'),
-                StatCard(label: 'Expenses', value: 'UGX ${fmt(expensesTotal)}', negative: true),
+                const StatCard(label: 'Opening Balance (Est.)', value: 'UGX 0', icon: Icons.account_balance_wallet_outlined),
+                StatCard(label: 'Cash Collected', value: 'UGX ${fmt(cashCollected)}', icon: Icons.arrow_downward, iconColor: Colors.green),
+                StatCard(label: 'Processing Fees', value: 'UGX ${fmt(processingFees)}', icon: Icons.receipt_long_outlined, iconColor: Colors.blue),
+                StatCard(label: 'Loans Distributed', value: 'UGX ${fmt(loansDistributed)}', icon: Icons.arrow_upward, iconColor: Colors.amber),
+                StatCard(label: 'Expenses', value: 'UGX ${fmt(expensesTotal)}', negative: true, icon: Icons.money_off, iconColor: Colors.red),
                 StatCard(
                   label: 'Amount Banked (manual)',
                   value: bankedSet ? 'UGX ${fmt(banked)}' : 'Not set',
                   change: 'Tap to enter',
                   onTap: () => _editBanked(dateStr, banked),
+                  icon: Icons.account_balance,
                 ),
               ],
             );
@@ -2917,8 +3165,8 @@ class _DailyWorkAccountabilityBodyState extends State<_DailyWorkAccountabilityBo
                 const Text('No expenses recorded for this date',
                     style: TextStyle(color: C.textFaint, fontSize: 12))
               else
-                SizedBox(
-                  width: double.infinity,
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
                   child: DataTable(columnSpacing: 24, columns: const [
                     DataColumn(label: Text('DATE')),
                     DataColumn(label: Text('REASON')),
@@ -3114,86 +3362,349 @@ class BranchesScreen extends StatelessWidget {
       animation: appState,
       builder: (_, __) {
         return PageWrap(children: [
-          SectionTitle('🏢', 'Branches'),
+          const SectionTitle('🏢', 'Branches'),
           SectionCard(
             title: '${appState.branches.length} branch(es) — every branch is independent',
             child: Column(children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: ElevatedButton.icon(
-                  onPressed: () => _addBranchDialog(context),
-                  icon: const Icon(Icons.add_business),
-                  label: const Text('Create Branch'),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: C.primary, foregroundColor: Colors.white),
-                ),
-              ),
+              LayoutBuilder(builder: (context, constraints) {
+                final isMobile = constraints.maxWidth < 750;
+                return Align(
+                  alignment: isMobile ? Alignment.center : Alignment.centerLeft,
+                  child: SizedBox(
+                    width: isMobile ? double.infinity : null,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _addBranchDialog(context),
+                      icon: const Icon(Icons.add_business),
+                      label: const Text('Create New Branch'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: C.primary,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 20, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                );
+              }),
               const SizedBox(height: 16),
               if (appState.branches.isEmpty)
                 const Padding(padding: EdgeInsets.all(20),
                     child: Text('No branches yet',
                         style: TextStyle(color: C.textFaint)))
               else
-                SizedBox(
-                  width: double.infinity,
-                  child: DataTable(columnSpacing: 20, columns: const [
-                    DataColumn(label: Text('ID')),
-                    DataColumn(label: Text('BRANCH NAME')),
-                    DataColumn(label: Text('LOCATION')),
-                    DataColumn(label: Text('MANAGER')),
-                    DataColumn(label: Text('CUSTOMERS')),
-                    DataColumn(label: Text('LOANS')),
-                    DataColumn(label: Text('STAFF')),
-                    DataColumn(label: Text('OPEN')),
-                  ], rows: appState.branches.map((b) {
-                    final custCount = appState.customers
-                        .where((c) => c.branchId == b.id).length;
-                    final loanCount = appState.loans
-                        .where((l) => l.branchId == b.id).length;
-                    final staffCount = appState.staffList
-                        .where((s) => s.branchId == b.id).length;
-                    final isCurrent = appState.activeBranchId == b.id;
-                    return DataRow(cells: [
-                      DataCell(Text('${b.id}')),
-                      DataCell(InkWell(
-                        onTap: () => _openBranch(context, b),
-                        child: Row(children: [
-                          Text(b.name, style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: C.info,
-                              decoration: TextDecoration.underline)),
-                          if (isCurrent) ...[
-                            const SizedBox(width: 6),
-                            const Icon(Icons.check_circle, size: 14, color: C.success),
-                          ] else
-                            const Padding(
-                              padding: EdgeInsets.only(left: 6),
-                              child: Icon(Icons.open_in_new, size: 14, color: C.info),
+                LayoutBuilder(builder: (context, constraints) {
+                  final isMobile = constraints.maxWidth < 750;
+                  if (isMobile) {
+                    return Column(
+                      children: appState.branches.map((b) {
+                        final custCount = appState.customers
+                            .where((c) => c.branchId == b.id).length;
+                        final loanCount = appState.loans
+                            .where((l) => l.branchId == b.id).length;
+                        final staffCount = appState.staffList
+                            .where((s) => s.branchId == b.id).length;
+                        final isCurrent = appState.activeBranchId == b.id;
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isCurrent ? C.primary : C.border,
+                              width: isCurrent ? 1.5 : 1.0,
                             ),
-                        ]),
-                      )),
-                      DataCell(Text(b.location)),
-                      DataCell(Text(b.manager)),
-                      DataCell(Text('$custCount')),
-                      DataCell(Text('$loanCount')),
-                      DataCell(Text('$staffCount')),
-                      DataCell(ElevatedButton.icon(
-                        onPressed: () => _openBranch(context, b),
-                        icon: const Icon(Icons.open_in_new, size: 14),
-                        label: Text(isCurrent ? 'Entered' : 'Open'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isCurrent ? C.success : C.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                      )),
-                    ]);
-                  }).toList()),
-                ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.03),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Row 1: Icon, Branch Name, ID badge, and Active status badge
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: isCurrent ? C.primary.withOpacity(0.12) : const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Icon(
+                                      Icons.business,
+                                      size: 20,
+                                      color: isCurrent ? C.primary : C.textMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                b.name,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15,
+                                                  color: C.textPrimary,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFF1F5F9),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                '#${b.id}',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: C.textMuted,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.location_on_outlined, size: 13, color: C.textMuted),
+                                            const SizedBox(width: 3),
+                                            Expanded(
+                                              child: Text(
+                                                b.location,
+                                                style: const TextStyle(fontSize: 12, color: C.textMuted),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (isCurrent)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFDCFCE7),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFF86EFAC)),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.check_circle, size: 12, color: C.success),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Active',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: C.success,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const Divider(height: 20, color: C.border),
+                              // Manager Row
+                              Row(
+                                children: [
+                                  const Icon(Icons.person_outline, size: 14, color: C.textMuted),
+                                  const SizedBox(width: 5),
+                                  const Text(
+                                    'Manager: ',
+                                    style: TextStyle(fontSize: 12, color: C.textMuted),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      b.manager.isEmpty ? 'Not assigned' : b.manager,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: C.textPrimary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              // 3 Mini Stat Boxes (Customers, Loans, Staff)
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildBranchStatBox(
+                                      icon: Icons.people_outline,
+                                      label: 'Customers',
+                                      value: '$custCount',
+                                      color: const Color(0xFF2563EB),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildBranchStatBox(
+                                      icon: Icons.description_outlined,
+                                      label: 'Loans',
+                                      value: '$loanCount',
+                                      color: const Color(0xFFD97706),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildBranchStatBox(
+                                      icon: Icons.badge_outlined,
+                                      label: 'Staff',
+                                      value: '$staffCount',
+                                      color: const Color(0xFF7C3AED),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              // Action Button
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _openBranch(context, b),
+                                  icon: Icon(isCurrent ? Icons.check_circle_outline : Icons.open_in_browser, size: 16),
+                                  label: Text(isCurrent ? 'Currently In This Branch' : 'Open / Switch Branch'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: isCurrent ? C.success : C.primary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  }
+
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(columnSpacing: 20, columns: const [
+                      DataColumn(label: Text('ID')),
+                      DataColumn(label: Text('BRANCH NAME')),
+                      DataColumn(label: Text('LOCATION')),
+                      DataColumn(label: Text('MANAGER')),
+                      DataColumn(label: Text('CUSTOMERS')),
+                      DataColumn(label: Text('LOANS')),
+                      DataColumn(label: Text('STAFF')),
+                      DataColumn(label: Text('OPEN')),
+                    ], rows: appState.branches.map((b) {
+                      final custCount = appState.customers
+                          .where((c) => c.branchId == b.id).length;
+                      final loanCount = appState.loans
+                          .where((l) => l.branchId == b.id).length;
+                      final staffCount = appState.staffList
+                          .where((s) => s.branchId == b.id).length;
+                      final isCurrent = appState.activeBranchId == b.id;
+                      return DataRow(cells: [
+                        DataCell(Text('${b.id}')),
+                        DataCell(InkWell(
+                          onTap: () => _openBranch(context, b),
+                          child: Row(children: [
+                            Text(b.name, style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: C.info,
+                                decoration: TextDecoration.underline)),
+                            if (isCurrent) ...[
+                              const SizedBox(width: 6),
+                              const Icon(Icons.check_circle, size: 14, color: C.success),
+                            ] else
+                              const Padding(
+                                padding: EdgeInsets.only(left: 6),
+                                child: Icon(Icons.open_in_new, size: 14, color: C.info),
+                              ),
+                          ]),
+                        )),
+                        DataCell(Text(b.location)),
+                        DataCell(Text(b.manager)),
+                        DataCell(Text('$custCount')),
+                        DataCell(Text('$loanCount')),
+                        DataCell(Text('$staffCount')),
+                        DataCell(ElevatedButton.icon(
+                          onPressed: () => _openBranch(context, b),
+                          icon: const Icon(Icons.open_in_new, size: 14),
+                          label: Text(isCurrent ? 'Entered' : 'Open'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isCurrent ? C.success : C.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                        )),
+                      ]);
+                    }).toList()),
+                  );
+                }),
             ]),
           ),
         ]);
       },
+    );
+  }
+
+  Widget _buildBranchStatBox({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 13, color: color),
+              const SizedBox(width: 3),
+              Text(
+                value,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: color.withOpacity(0.85),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3221,6 +3732,16 @@ class _BranchShellState extends State<BranchShell> {
     _NavItem('branches', 'Branches', Icons.business_outlined, 'System'),
     _NavItem('staff', 'Staff Management', Icons.manage_accounts_outlined, 'System'),
   ];
+
+  int _getBottomNavIndex(String p) {
+    switch (p) {
+      case 'dashboard': return 0;
+      case 'customers': return 1;
+      case 'loans': return 2;
+      case 'payments': return 3;
+      default: return 4;
+    }
+  }
 
   void go(String p) {
     final allowed = Role.pages(appState.currentRole);
@@ -3275,22 +3796,28 @@ class _BranchShellState extends State<BranchShell> {
               children: [
                 Container(
                   color: const Color(0xFF92400E),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   child: Row(children: [
-                    const Icon(Icons.business, color: C.accent, size: 18),
+                    const Icon(Icons.business, color: C.accent, size: 16),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'You are inside branch: ${branch?.name ?? ''}  ·  ${branch?.location ?? ''}',
+                        'Branch: ${branch?.name ?? ''} (${branch?.location ?? ''})',
                         style: const TextStyle(color: Colors.white,
-                            fontSize: 13, fontWeight: FontWeight.w600),
+                            fontSize: 12, fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     TextButton.icon(
                       onPressed: _exitBranch,
-                      icon: const Icon(Icons.arrow_back, size: 16, color: Colors.white),
-                      label: const Text('Back to HQ',
+                      icon: const Icon(Icons.arrow_back, size: 14, color: Colors.white),
+                      label: const Text('HQ',
                           style: TextStyle(color: Colors.white, fontSize: 12)),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                     ),
                   ]),
                 ),
@@ -3299,6 +3826,31 @@ class _BranchShellState extends State<BranchShell> {
               ],
             ),
           ),
+        ],
+      ),
+      bottomNavigationBar: isWide ? null : BottomNavigationBar(
+        currentIndex: _getBottomNavIndex(page),
+        onTap: (index) {
+          switch (index) {
+            case 0: go('dashboard'); break;
+            case 1: go('customers'); break;
+            case 2: go('loans'); break;
+            case 3: go('payments'); break;
+            case 4: _scaffoldKey.currentState?.openDrawer(); break;
+          }
+        },
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: C.primary,
+        unselectedItemColor: C.textMuted,
+        backgroundColor: Colors.white,
+        selectedFontSize: 11,
+        unselectedFontSize: 11,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline), activeIcon: Icon(Icons.pie_chart), label: 'Dashboard'),
+          BottomNavigationBarItem(icon: Icon(Icons.people_outline), activeIcon: Icon(Icons.people), label: 'Customers'),
+          BottomNavigationBarItem(icon: Icon(Icons.description_outlined), activeIcon: Icon(Icons.description), label: 'Loans'),
+          BottomNavigationBarItem(icon: Icon(Icons.payments_outlined), activeIcon: Icon(Icons.payments), label: 'Payments'),
+          BottomNavigationBarItem(icon: Icon(Icons.menu), label: 'More'),
         ],
       ),
     );
@@ -3422,9 +3974,17 @@ class _BranchShellState extends State<BranchShell> {
               const Icon(Icons.payments, color: C.accent, size: 28),
               const SizedBox(width: 10),
               const Expanded(
-                child: Text('QUADRATIC',
-                    style: TextStyle(color: Colors.white, fontSize: 18,
-                        fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                child: Row(
+                  children: [
+                    Text('QUADRATIC',
+                        style: TextStyle(color: Colors.white, fontSize: 17,
+                            fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                    SizedBox(width: 6),
+                    Text('FS',
+                        style: TextStyle(color: C.accent, fontSize: 17,
+                            fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                  ],
+                ),
               ),
             ]),
           ),
@@ -3503,9 +4063,26 @@ class _BranchShellState extends State<BranchShell> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(titles[page] ?? '',
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700,
-                        color: C.textPrimary)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(titles[page] ?? '',
+                          style: TextStyle(fontSize: isWide ? 20 : 17, fontWeight: FontWeight.w700,
+                              color: C.textPrimary),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: C.primary,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text('FS',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: C.accent, letterSpacing: 0.5)),
+                    ),
+                  ],
+                ),
                 if (branch != null)
                   Text(branch.name,
                       style: const TextStyle(fontSize: 12, color: C.textMuted)),
@@ -3587,9 +4164,17 @@ class _BranchShellState extends State<BranchShell> {
             child: Row(children: [
               const Icon(Icons.payments, color: C.accent, size: 28),
               const SizedBox(width: 10),
-              const Text('QUADRATIC',
-                  style: TextStyle(color: Colors.white, fontSize: 18,
-                      fontWeight: FontWeight.w700)),
+              const Row(
+                children: [
+                  Text('QUADRATIC',
+                      style: TextStyle(color: Colors.white, fontSize: 18,
+                          fontWeight: FontWeight.w800)),
+                  SizedBox(width: 6),
+                  Text('FS',
+                      style: TextStyle(color: C.accent, fontSize: 18,
+                          fontWeight: FontWeight.w900)),
+                ],
+              ),
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.close, color: Colors.white70),
@@ -4131,15 +4716,30 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Text(
-                      'QUADRATIC FS',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: C.primary,
-                        letterSpacing: 0.5,
-                      ),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          'QUADRATIC',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: C.primary,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'FS',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: C.accent,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     const Text(
